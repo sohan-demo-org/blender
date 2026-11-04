@@ -34,6 +34,7 @@
 #include "BKE_mesh.hh"
 #include "BKE_mesh_mapping.hh"
 #include "BKE_mesh_wrapper.hh"
+#include "BKE_nla.hh"
 #include "BKE_object.hh"
 #include "BKE_report.hh"
 #include "BKE_subdiv.hh"
@@ -248,7 +249,7 @@ static bool object_color_is_animated(const Object &object)
     }
   }
   for (const NlaTrack &track : adt->nla_tracks) {
-    if (track.flag & NLATRACK_MUTED) {
+    if (!BKE_nlatrack_is_enabled(*adt, track)) {
       continue;
     }
     if (nla_strips_animate_object_color(track.strips)) {

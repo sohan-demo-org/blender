@@ -707,6 +707,15 @@ class USDExportTest(AbstractUSDTest):
         primvar = UsdGeom.PrimvarsAPI(stage.GetPrimAtPath("/root/Cube/Cube")).GetPrimvar("displayColor")
         self.assertEqual(primvar.GetTimeSamples(), [])
 
+        # Soloing a track evaluates it even when it is muted.
+        track.is_solo = True
+        export_path = self.tempdir / "usd_object_color_solo_nla.usda"
+        self.export_and_validate(filepath=str(export_path), export_animation=True, export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        primvar = UsdGeom.PrimvarsAPI(stage.GetPrimAtPath("/root/Cube/Cube")).GetPrimvar("displayColor")
+        self.assertEqual(primvar.GetTimeSamples(), [1.0, 2.0, 3.0])
+
     def test_export_attributes(self):
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_test.blend"))
         export_path = self.tempdir / "usd_attribute_test.usda"

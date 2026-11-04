@@ -205,6 +205,31 @@ void USDGenericMeshWriter::write_custom_data(const Object *obj,
   });
 }
 
+void USDGenericMeshWriter::write_object_color(const Object *obj,
+                                              const Mesh *mesh,
+                                              const pxr::UsdGeomMesh &usd_mesh)
+{
+  /* Color attributes and attributes that map to the `displayColor` primvar take precedence. */
+  const bool allow_unicode = usd_export_context_.export_params.allow_unicode;
+  bool has_own_color = false;
+  mesh->attributes().foreach_attribute([&](const bke::AttributeIter &iter) {
+    if (bke::mesh::is_color_attribute({iter.domain, iter.data_type}) ||
+        make_safe_primvar_name(iter.name, allow_unicode) == usdtokens::displayColor.GetString())
+    {
+      has_own_color = true;
+      iter.stop();
+    }
+  });
+  if (has_own_color) {
+    return;
+  }
+
+  pxr::UsdGeomPrimvar pv_color = usd_mesh.CreateDisplayColorPrimvar(pxr::UsdGeomTokens->constant,
+                                                                    1);
+  pxr::VtArray<pxr::GfVec3f> color = {pxr::GfVec3f(obj->color[0], obj->color[1], obj->color[2])};
+  set_attribute(pv_color, color, get_export_time_code(), usd_value_writer_);
+}
+
 static std::optional<pxr::TfToken> convert_blender_domain_to_usd(
     const bke::AttrDomain blender_domain)
 {
@@ -420,6 +445,10 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context,
 
   write_custom_data(context.object, mesh, usd_mesh);
   write_surface_velocity(mesh, usd_mesh);
+
+  if (usd_export_context_.export_params.export_object_color) {
+    write_object_color(context.object, mesh, usd_mesh);
+  }
 
   const pxr::TfToken subdiv_scheme = get_subdiv_scheme(subsurfData);
 

@@ -328,6 +328,7 @@ static wmOperatorStatus wm_usd_export_exec(bContext *C, wmOperator *op)
   params.rename_uvmaps = RNA_boolean_get(op->ptr, "rename_uvmaps");
   params.export_normals = RNA_boolean_get(op->ptr, "export_normals");
   params.export_mesh_colors = RNA_boolean_get(op->ptr, "export_mesh_colors");
+  params.export_object_color = RNA_boolean_get(op->ptr, "export_object_color");
   params.export_materials = RNA_boolean_get(op->ptr, "export_materials");
 
   params.export_armatures = RNA_boolean_get(op->ptr, "export_armatures");
@@ -451,6 +452,7 @@ static void wm_usd_export_draw(bContext *C, wmOperator *op)
     col.prop(ptr, "export_uvmaps", UI_ITEM_NONE, std::nullopt, ICON_NONE);
     col.prop(ptr, "rename_uvmaps", UI_ITEM_NONE, std::nullopt, ICON_NONE);
     col.prop(ptr, "export_normals", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    col.prop(ptr, "export_object_color", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
     col.prop(ptr, "merge_parent_xform", UI_ITEM_NONE, std::nullopt, ICON_NONE);
     col.prop(ptr, "triangulate_meshes", UI_ITEM_NONE, std::nullopt, ICON_NONE);
@@ -626,6 +628,12 @@ void WM_OT_usd_export(wmOperatorType *ot)
                   true,
                   "Color Attributes",
                   "Include mesh color attributes in the export");
+  RNA_def_boolean(ot->srna,
+                  "export_object_color",
+                  false,
+                  "Export Object Color",
+                  "Write the object's viewport display color as the displayColor primvar of "
+                  "exported meshes that have no color attribute of their own");
   RNA_def_boolean(ot->srna,
                   "export_normals",
                   true,

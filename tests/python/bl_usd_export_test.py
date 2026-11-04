@@ -619,6 +619,44 @@ class USDExportTest(AbstractUSDTest):
         pv = UsdGeom.PrimvarsAPI(prim).GetPrimvar(pv_name)
         self.assertFalse(pv.HasValue())
 
+    def test_export_object_color(self):
+        """Test exporting the object viewport display color as the displayColor primvar."""
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+
+        bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
+        plain = bpy.context.active_object
+        plain.name = "Plain"
+        plain.data.name = "Plain"
+        plain.color = (0.8, 0.2, 0.1, 1.0)
+
+        bpy.ops.mesh.primitive_cube_add(location=(3, 0, 0))
+        colored = bpy.context.active_object
+        colored.name = "WithColorAttr"
+        colored.data.name = "WithColorAttr"
+        colored.color = (0.1, 0.7, 0.3, 1.0)
+        colored.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
+
+        # Off by default: no displayColor is written for either mesh.
+        export_path = self.tempdir / "usd_object_color_default.usda"
+        self.export_and_validate(filepath=str(export_path))
+        stage = Usd.Stage.Open(str(export_path))
+        self.check_primvar_missing(stage.GetPrimAtPath("/root/Plain/Plain"), "displayColor")
+        self.check_primvar_missing(stage.GetPrimAtPath("/root/WithColorAttr/WithColorAttr"), "displayColor")
+
+        # Enabled: only the mesh without its own color attribute gets the object color.
+        export_path = self.tempdir / "usd_object_color.usda"
+        self.export_and_validate(filepath=str(export_path), export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        prim = stage.GetPrimAtPath("/root/Plain/Plain")
+        self.check_primvar(prim, "displayColor", "VtArray<GfVec3f>", "constant", 1)
+        color = UsdGeom.PrimvarsAPI(prim).GetPrimvar("displayColor").Get()[0]
+        self.assertEqual(self.round_vector(color), [0.8, 0.2, 0.1])
+
+        prim = stage.GetPrimAtPath("/root/WithColorAttr/WithColorAttr")
+        self.check_primvar_missing(prim, "displayColor")
+        self.check_primvar(prim, "Col", "VtArray<GfVec4f>", "vertex", 8)
+
     def test_export_attributes(self):
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_test.blend"))
         export_path = self.tempdir / "usd_attribute_test.usda"

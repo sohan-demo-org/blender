@@ -685,7 +685,8 @@ class USDExportTest(AbstractUSDTest):
         action = obj.animation_data.action
         slot = obj.animation_data.action_slot
         obj.animation_data.action = None
-        strip = obj.animation_data.nla_tracks.new().strips.new("ColorStrip", 1, action)
+        track = obj.animation_data.nla_tracks.new()
+        strip = track.strips.new("ColorStrip", 1, action)
         strip.action_slot = slot
 
         export_path = self.tempdir / "usd_object_color_animated_nla.usda"
@@ -696,6 +697,15 @@ class USDExportTest(AbstractUSDTest):
         self.assertEqual(primvar.GetTimeSamples(), [1.0, 2.0, 3.0])
         self.assertEqual(self.round_vector(primvar.Get(1.0)[0]), [1.0, 0.0, 0.0])
         self.assertEqual(self.round_vector(primvar.Get(3.0)[0]), [0.0, 0.0, 1.0])
+
+        # A muted track (e.g. a stashed action) does not animate the color.
+        track.mute = True
+        export_path = self.tempdir / "usd_object_color_muted_nla.usda"
+        self.export_and_validate(filepath=str(export_path), export_animation=True, export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        primvar = UsdGeom.PrimvarsAPI(stage.GetPrimAtPath("/root/Cube/Cube")).GetPrimvar("displayColor")
+        self.assertEqual(primvar.GetTimeSamples(), [])
 
     def test_export_attributes(self):
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_test.blend"))

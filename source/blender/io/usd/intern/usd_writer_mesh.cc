@@ -214,6 +214,9 @@ void USDGenericMeshWriter::write_custom_data(const Object *obj,
 static bool nla_strips_animate_object_color(const ListBaseT<NlaStrip> &strips)
 {
   for (const NlaStrip &strip : strips) {
+    if (strip.flag & NLASTRIP_FLAG_MUTED) {
+      continue;
+    }
     if (nla_strips_animate_object_color(strip.strips)) {
       return true;
     }
@@ -245,6 +248,9 @@ static bool object_color_is_animated(const Object &object)
     }
   }
   for (const NlaTrack &track : adt->nla_tracks) {
+    if (track.flag & NLATRACK_MUTED) {
+      continue;
+    }
     if (nla_strips_animate_object_color(track.strips)) {
       return true;
     }

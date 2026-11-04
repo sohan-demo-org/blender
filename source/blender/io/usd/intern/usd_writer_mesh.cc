@@ -18,17 +18,23 @@
 
 #include "IO_mesh_utils.hh"
 
+#include "ANIM_action.hh"
+
 #include "BLI_array_utils.hh"
 #include "BLI_assert.hh"
+#include "BLI_listbase_iterator.hh"
 #include "BLI_math_vector_types.hh"
 
+#include "BKE_anim_data.hh"
 #include "BKE_anonymous_attribute_id.hh"
 #include "BKE_attribute.hh"
+#include "BKE_fcurve.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_material.hh"
 #include "BKE_mesh.hh"
 #include "BKE_mesh_mapping.hh"
 #include "BKE_mesh_wrapper.hh"
+#include "BKE_nla.hh"
 #include "BKE_object.hh"
 #include "BKE_report.hh"
 #include "BKE_subdiv.hh"
@@ -38,6 +44,7 @@
 
 #include "DEG_depsgraph.hh"
 
+#include "DNA_anim_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
 #include "DNA_modifier_types.h"
@@ -203,6 +210,88 @@ void USDGenericMeshWriter::write_custom_data(const Object *obj,
       this->write_generic_data(mesh, usd_mesh, iter);
     }
   });
+}
+
+static bool nla_strips_animate_object_color(const ListBaseT<NlaStrip> &strips)
+{
+  for (const NlaStrip &strip : strips) {
+    if (strip.flag & NLASTRIP_FLAG_MUTED) {
+      continue;
+    }
+    if (nla_strips_animate_object_color(strip.strips)) {
+      return true;
+    }
+    if (strip.act == nullptr) {
+      continue;
+    }
+    for (const int index : IndexRange(3)) {
+      if (animrig::fcurve_find_in_action_slot(strip.act, strip.action_slot_handle, {"color", index}))
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool object_color_is_animated(const Object &object)
+{
+  AnimData *adt = BKE_animdata_from_id(&object.id);
+  if (adt == nullptr) {
+    return false;
+  }
+  for (const int index : IndexRange(3)) {
+    bool is_driven = false;
+    if (BKE_animadata_fcurve_find_by_rna_path(adt, "color", index, nullptr, &is_driven) ||
+        is_driven)
+    {
+      return true;
+    }
+  }
+  for (const NlaTrack &track : adt->nla_tracks) {
+    if (!BKE_nlatrack_is_enabled(*adt, track)) {
+      continue;
+    }
+    if (nla_strips_animate_object_color(track.strips)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool USDGenericMeshWriter::check_is_animated(const HierarchyContext &context) const
+{
+  if (usd_export_context_.export_params.export_object_color &&
+      object_color_is_animated(*context.object))
+  {
+    return true;
+  }
+  return USDAbstractWriter::check_is_animated(context);
+}
+
+void USDGenericMeshWriter::write_object_color(const Object *obj,
+                                              const Mesh *mesh,
+                                              const pxr::UsdGeomMesh &usd_mesh)
+{
+  /* Color attributes and attributes that map to the `displayColor` primvar take precedence. */
+  const bool allow_unicode = usd_export_context_.export_params.allow_unicode;
+  bool has_own_color = false;
+  mesh->attributes().foreach_attribute([&](const bke::AttributeIter &iter) {
+    if (bke::mesh::is_color_attribute({iter.domain, iter.data_type}) ||
+        make_safe_primvar_name(iter.name, allow_unicode) == usdtokens::displayColor.GetString())
+    {
+      has_own_color = true;
+      iter.stop();
+    }
+  });
+  if (has_own_color) {
+    return;
+  }
+
+  pxr::UsdGeomPrimvar pv_color = usd_mesh.CreateDisplayColorPrimvar(pxr::UsdGeomTokens->constant,
+                                                                    1);
+  pxr::VtArray<pxr::GfVec3f> color = {pxr::GfVec3f(obj->color[0], obj->color[1], obj->color[2])};
+  set_attribute(pv_color, color, get_export_time_code(), usd_value_writer_);
 }
 
 static std::optional<pxr::TfToken> convert_blender_domain_to_usd(
@@ -420,6 +509,10 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context,
 
   write_custom_data(context.object, mesh, usd_mesh);
   write_surface_velocity(mesh, usd_mesh);
+
+  if (usd_export_context_.export_params.export_object_color) {
+    write_object_color(context.object, mesh, usd_mesh);
+  }
 
   const pxr::TfToken subdiv_scheme = get_subdiv_scheme(subsurfData);
 

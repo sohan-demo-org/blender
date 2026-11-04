@@ -31,6 +31,7 @@ class USDGenericMeshWriter : public USDAbstractWriter {
 
  protected:
   bool is_supported(const HierarchyContext *context) const override;
+  bool check_is_animated(const HierarchyContext &context) const override;
   void do_write(HierarchyContext &context) override;
 
   virtual Mesh *get_export_mesh(Object *object_eval, bool &r_needsfree) = 0;
@@ -48,6 +49,7 @@ class USDGenericMeshWriter : public USDAbstractWriter {
                         const MaterialFaceGroups &usd_face_groups);
   void write_normals(const Mesh *mesh, pxr::UsdGeomMesh &usd_mesh);
   void write_surface_velocity(const Mesh *mesh, const pxr::UsdGeomMesh &usd_mesh);
+  void write_object_color(const Object *obj, const Mesh *mesh, const pxr::UsdGeomMesh &usd_mesh);
 
   void write_custom_data(const Object *obj, const Mesh *mesh, const pxr::UsdGeomMesh &usd_mesh);
   void write_generic_data(const Mesh *mesh,

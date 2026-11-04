@@ -18,8 +18,11 @@
 
 #include "IO_mesh_utils.hh"
 
+#include "ANIM_action.hh"
+
 #include "BLI_array_utils.hh"
 #include "BLI_assert.hh"
+#include "BLI_listbase_iterator.hh"
 #include "BLI_math_vector_types.hh"
 
 #include "BKE_anim_data.hh"
@@ -40,6 +43,7 @@
 
 #include "DEG_depsgraph.hh"
 
+#include "DNA_anim_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
 #include "DNA_modifier_types.h"
@@ -207,6 +211,25 @@ void USDGenericMeshWriter::write_custom_data(const Object *obj,
   });
 }
 
+static bool nla_strips_animate_object_color(const ListBaseT<NlaStrip> &strips)
+{
+  for (const NlaStrip &strip : strips) {
+    if (nla_strips_animate_object_color(strip.strips)) {
+      return true;
+    }
+    if (strip.act == nullptr) {
+      continue;
+    }
+    for (const int index : IndexRange(3)) {
+      if (animrig::fcurve_find_in_action_slot(strip.act, strip.action_slot_handle, {"color", index}))
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static bool object_color_is_animated(const Object &object)
 {
   AnimData *adt = BKE_animdata_from_id(&object.id);
@@ -218,6 +241,11 @@ static bool object_color_is_animated(const Object &object)
     if (BKE_animadata_fcurve_find_by_rna_path(adt, "color", index, nullptr, &is_driven) ||
         is_driven)
     {
+      return true;
+    }
+  }
+  for (const NlaTrack &track : adt->nla_tracks) {
+    if (nla_strips_animate_object_color(track.strips)) {
       return true;
     }
   }

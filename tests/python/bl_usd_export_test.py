@@ -657,6 +657,30 @@ class USDExportTest(AbstractUSDTest):
         self.check_primvar_missing(prim, "displayColor")
         self.check_primvar(prim, "Col", "VtArray<GfVec4f>", "vertex", 8)
 
+    def test_export_object_color_animated(self):
+        """Test that an animated object viewport display color is written per frame."""
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.context.scene.frame_start = 1
+        bpy.context.scene.frame_end = 3
+
+        bpy.ops.mesh.primitive_cube_add()
+        obj = bpy.context.active_object
+        obj.name = "Cube"
+        obj.data.name = "Cube"
+        obj.color = (1.0, 0.0, 0.0, 1.0)
+        obj.keyframe_insert("color", frame=1)
+        obj.color = (0.0, 0.0, 1.0, 1.0)
+        obj.keyframe_insert("color", frame=3)
+
+        export_path = self.tempdir / "usd_object_color_animated.usda"
+        self.export_and_validate(filepath=str(export_path), export_animation=True, export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        primvar = UsdGeom.PrimvarsAPI(stage.GetPrimAtPath("/root/Cube/Cube")).GetPrimvar("displayColor")
+        self.assertEqual(primvar.GetTimeSamples(), [1.0, 2.0, 3.0])
+        self.assertEqual(self.round_vector(primvar.Get(1.0)[0]), [1.0, 0.0, 0.0])
+        self.assertEqual(self.round_vector(primvar.Get(3.0)[0]), [0.0, 0.0, 1.0])
+
     def test_export_attributes(self):
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_test.blend"))
         export_path = self.tempdir / "usd_attribute_test.usda"

@@ -22,8 +22,10 @@
 #include "BLI_assert.hh"
 #include "BLI_math_vector_types.hh"
 
+#include "BKE_anim_data.hh"
 #include "BKE_anonymous_attribute_id.hh"
 #include "BKE_attribute.hh"
+#include "BKE_fcurve.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_material.hh"
 #include "BKE_mesh.hh"
@@ -203,6 +205,33 @@ void USDGenericMeshWriter::write_custom_data(const Object *obj,
       this->write_generic_data(mesh, usd_mesh, iter);
     }
   });
+}
+
+static bool object_color_is_animated(const Object &object)
+{
+  AnimData *adt = BKE_animdata_from_id(&object.id);
+  if (adt == nullptr) {
+    return false;
+  }
+  for (const int index : IndexRange(3)) {
+    bool is_driven = false;
+    if (BKE_animadata_fcurve_find_by_rna_path(adt, "color", index, nullptr, &is_driven) ||
+        is_driven)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool USDGenericMeshWriter::check_is_animated(const HierarchyContext &context) const
+{
+  if (usd_export_context_.export_params.export_object_color &&
+      object_color_is_animated(*context.object))
+  {
+    return true;
+  }
+  return USDAbstractWriter::check_is_animated(context);
 }
 
 void USDGenericMeshWriter::write_object_color(const Object *obj,

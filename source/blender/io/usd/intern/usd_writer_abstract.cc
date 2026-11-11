@@ -385,12 +385,12 @@ void USDAbstractWriter::write_object_color(const HierarchyContext &context,
   const pxr::UsdTimeCode time = get_export_time_code();
 
   const pxr::UsdGeomPrimvar pv_color = gprim.CreateDisplayColorPrimvar(
-      pxr::UsdGeomTokens->constant, 1);
+      pxr::UsdGeomTokens->constant);
   const pxr::VtArray<pxr::GfVec3f> usd_color = {pxr::GfVec3f(color[0], color[1], color[2])};
   usd_value_writer_.SetAttribute(pv_color.GetAttr(), pxr::VtValue(usd_color), time);
 
   const pxr::UsdGeomPrimvar pv_opacity = gprim.CreateDisplayOpacityPrimvar(
-      pxr::UsdGeomTokens->constant, 1);
+      pxr::UsdGeomTokens->constant);
   const pxr::VtArray<float> usd_opacity = {color[3]};
   usd_value_writer_.SetAttribute(pv_opacity.GetAttr(), pxr::VtValue(usd_opacity), time);
 

@@ -1056,21 +1056,25 @@ class USDExportTest(AbstractUSDTest):
         bpy.ops.mesh.primitive_cube_add()
         mesh_ob = bpy.context.active_object
         mesh_ob.name = "ColorMesh"
+        mesh_ob.data.name = "ColorMesh"
         mesh_ob.color = (1.0, 0.0, 0.0, 0.5)
 
         bpy.ops.curve.primitive_bezier_curve_add()
         curve_ob = bpy.context.active_object
         curve_ob.name = "ColorCurve"
+        curve_ob.data.name = "ColorCurve"
         curve_ob.color = (0.0, 1.0, 0.0, 1.0)
 
         bpy.ops.object.pointcloud_random_add()
         points_ob = bpy.context.active_object
         points_ob.name = "ColorPoints"
+        points_ob.data.name = "ColorPoints"
         points_ob.color = (0.0, 0.0, 1.0, 0.25)
 
         bpy.ops.mesh.primitive_plane_add()
         attr_ob = bpy.context.active_object
         attr_ob.name = "AttrMesh"
+        attr_ob.data.name = "AttrMesh"
         attr_ob.color = (1.0, 1.0, 0.0, 1.0)
         attr = attr_ob.data.color_attributes.new("displayColor", 'FLOAT_COLOR', 'CORNER')
         for item in attr.data:
@@ -1080,7 +1084,7 @@ class USDExportTest(AbstractUSDTest):
         export_path = self.tempdir / "usd_object_color_off.usda"
         self.export_and_validate(filepath=str(export_path))
         stage = Usd.Stage.Open(str(export_path))
-        for path in ("/root/ColorMesh/Cube", "/root/ColorCurve/BezierCurve", "/root/ColorPoints/PointCloud"):
+        for path in ("/root/ColorMesh/ColorMesh", "/root/ColorCurve/ColorCurve", "/root/ColorPoints/ColorPoints"):
             gprim = UsdGeom.Gprim(stage.GetPrimAtPath(path))
             self.assertTrue(gprim, path)
             self.assertFalse(gprim.GetDisplayColorAttr().HasAuthoredValue(), path)
@@ -1102,12 +1106,12 @@ class USDExportTest(AbstractUSDTest):
             self.assertEqual([self.round_vector(c) for c in pv_color.Get()], [color])
             self.assertEqual(self.round_vector(pv_opacity.Get()), [opacity])
 
-        check_object_color("/root/ColorMesh/Cube", [1.0, 0.0, 0.0], 0.5)
-        check_object_color("/root/ColorCurve/BezierCurve", [0.0, 1.0, 0.0], 1.0)
-        check_object_color("/root/ColorPoints/PointCloud", [0.0, 0.0, 1.0], 0.25)
+        check_object_color("/root/ColorMesh/ColorMesh", [1.0, 0.0, 0.0], 0.5)
+        check_object_color("/root/ColorCurve/ColorCurve", [0.0, 1.0, 0.0], 1.0)
+        check_object_color("/root/ColorPoints/ColorPoints", [0.0, 0.0, 1.0], 0.25)
 
         # A "displayColor" color attribute takes precedence over the object color.
-        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AttrMesh/Plane"))
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AttrMesh/AttrMesh"))
         self.assertEqual(gprim.GetDisplayColorPrimvar().GetInterpolation(), UsdGeom.Tokens.faceVarying)
         self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
 

@@ -720,7 +720,8 @@ class USDRoundtripMaterialsTest(AbstractUSDTest):
         self.assertEqual(self.usd_input_value(tex, "file").path, "./textures/test_single.png")
         self.assertTrue((self.tempdir / "textures" / "test_single.png").exists())
         img = self.principled("MatTex").inputs["Base Color"].links[0].from_node.image
-        self.assertEqual(pathlib.Path(img.filepath).resolve(), (self.tempdir / "textures" / "test_single.png").resolve())
+        self.assertEqual(pathlib.Path(img.filepath).resolve(),
+                         (self.tempdir / "textures" / "test_single.png").resolve())
         self.assertIsNone(img.packed_file)
 
         # KEEP: the original file path is written (relative to the USD file).

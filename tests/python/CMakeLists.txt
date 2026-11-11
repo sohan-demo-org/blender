@@ -1430,6 +1430,12 @@ if(WITH_USD AND TEST_SRC_DIR_EXISTS)
     --testdir "${TEST_SRC_DIR}/usd"
     --outdir "${TEST_OUT_DIR}/io_usd"
   )
+  add_blender_test(
+    io_usd_roundtrip_curves
+    --python ${CMAKE_CURRENT_LIST_DIR}/bl_usd_roundtrip_curves_test.py
+    --
+    --testdir "${TEST_SRC_DIR}/usd"
+  )
 
   # The collection IO tests need USD
   add_blender_test(

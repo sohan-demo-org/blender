@@ -1170,9 +1170,11 @@ class USDExportTest(AbstractUSDTest):
         stage = Usd.Stage.Open(str(export_path))
         gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AnimAttrMesh/AnimAttrMesh"))
         pv_color = gprim.GetDisplayColorPrimvar()
-        self.assertEqual([self.round_vector(c) for c in pv_color.Get(1)], [[0.0, 1.0, 1.0]])
+        # Interpolation can't vary over time, so the earlier constant object color is dropped.
         self.assertEqual(pv_color.GetInterpolation(), UsdGeom.Tokens.vertex)
+        self.assertEqual(pv_color.GetAttr().GetTimeSamples(), [2.0])
         self.assertEqual([self.round_vector(c) for c in pv_color.Get(2)], [[0.8, 0.6, 0.4]] * 4)
+        self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
 
     def test_export_curves_empty(self):
         """Test exporting Curves that are empty"""

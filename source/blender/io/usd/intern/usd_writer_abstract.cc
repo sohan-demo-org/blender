@@ -387,9 +387,25 @@ void USDAbstractWriter::write_object_color(const HierarchyContext &context,
     return !object_color_written_ ||
            pxr::UsdGeomPrimvar(attr).GetInterpolation() != pxr::UsdGeomTokens->constant;
   };
-  if (authored_by_geometry(gprim.GetDisplayColorAttr()) ||
-      authored_by_geometry(gprim.GetDisplayOpacityAttr()))
-  {
+  const pxr::UsdAttribute color_attr = gprim.GetDisplayColorAttr();
+  const pxr::UsdAttribute opacity_attr = gprim.GetDisplayOpacityAttr();
+  if (authored_by_geometry(color_attr) || authored_by_geometry(opacity_attr)) {
+    if (object_color_written_) {
+      /* The geometry took over on this frame. Interpolation can't vary over time, so drop the
+       * constant object color samples written on earlier frames. */
+      const double current_time = get_export_time_code().GetValue();
+      for (const pxr::UsdAttribute &attr : {color_attr, opacity_attr}) {
+        std::vector<double> times;
+        attr.GetTimeSamples(&times);
+        for (const double t : times) {
+          if (t < current_time) {
+            attr.ClearAtTime(t);
+          }
+        }
+        attr.ClearDefault();
+      }
+      object_color_written_ = false;
+    }
     return;
   }
 

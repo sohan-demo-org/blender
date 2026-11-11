@@ -592,9 +592,11 @@ void USDAbstractWriter::write_object_color(const Object &object,
     return;
   }
 
-  /* Only skip a `displayColor` that was not authored by this function on an earlier frame. */
+  /* Only skip a `displayColor` that was not authored by this function on an earlier frame.
+   * Check for an authored value: `displayColor` is a built-in Gprim schema attribute, so it
+   * always "exists" on the prim. */
   if (!override_existing && !object_color_written_ &&
-      pxr::UsdGeomPrimvarsAPI(gprim).HasPrimvar(usdtokens::displayColor))
+      pxr::UsdGeomPrimvarsAPI(gprim).GetPrimvar(usdtokens::displayColor).HasAuthoredValue())
   {
     return;
   }

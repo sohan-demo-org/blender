@@ -128,6 +128,7 @@ struct USDExportParams {
   bool rename_uvmaps = true;
   bool export_normals = true;
   bool export_mesh_colors = true;
+  bool export_object_color = false;
   bool export_materials = true;
 
   bool export_armatures = true;

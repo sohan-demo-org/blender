@@ -731,6 +731,41 @@ class USDExportTest(AbstractUSDTest):
         self.check_primvar(prim, "sp_quat", "VtArray<GfQuatf>", "uniform", 3)
         self.check_primvar(prim, "sp_mat4x4", "VtArray<GfMatrix4d>", "uniform", 3)
 
+    def test_export_object_color(self):
+        """Test exporting the object viewport color as a displayColor primvar."""
+        bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "empty.blend"))
+        bpy.ops.mesh.primitive_cube_add()
+        bpy.context.active_object.color = (0.1, 0.5, 0.8, 0.25)
+
+        # Off by default: no displayColor is written.
+        export_path = self.tempdir / "usd_object_color_off.usda"
+        self.export_and_validate(filepath=str(export_path))
+        stage = Usd.Stage.Open(str(export_path))
+        self.check_primvar_missing(stage.GetPrimAtPath("/root/Cube/Cube"), "displayColor")
+
+        # Enabled: the RGB of the object color is written as a single constant value.
+        export_path = self.tempdir / "usd_object_color_on.usda"
+        self.export_and_validate(filepath=str(export_path), export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+        prim = stage.GetPrimAtPath("/root/Cube/Cube")
+        self.check_primvar(prim, "displayColor", "VtArray<GfVec3f>", "constant", 1)
+        color = UsdGeom.PrimvarsAPI(prim).GetPrimvar("displayColor").Get()[0]
+        self.compareVec3d(color, Gf.Vec3f(0.1, 0.5, 0.8))
+
+        # An existing displayColor mesh attribute takes precedence over the object color,
+        # while geometry without one (curves) receives the object color.
+        bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_test.blend"))
+        for ob in bpy.data.objects:
+            ob.color = (0.2, 0.4, 0.6, 1.0)
+        export_path = self.tempdir / "usd_object_color_attributes.usda"
+        self.export_and_validate(filepath=str(export_path), evaluation_mode="RENDER", export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+        self.check_primvar(stage.GetPrimAtPath("/root/Mesh/Mesh"), "displayColor", "VtArray<GfVec3f>", "uniform", 1)
+        prim = stage.GetPrimAtPath("/root/Curve_base/Curves/Curves")
+        self.check_primvar(prim, "displayColor", "VtArray<GfVec3f>", "constant", 1)
+        color = UsdGeom.PrimvarsAPI(prim).GetPrimvar("displayColor").Get()[0]
+        self.compareVec3d(color, Gf.Vec3f(0.2, 0.4, 0.6))
+
     def test_export_attributes_varying(self):
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_attribute_varying_test.blend"))
         # Ensure the simulation zone data is baked for all relevant frames...

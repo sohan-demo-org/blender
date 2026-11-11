@@ -74,7 +74,10 @@ void USDHairWriter::do_write(HierarchyContext &context)
   usd_value_writer_.SetAttribute(attr_points, pxr::VtValue(points), time);
   usd_value_writer_.SetAttribute(attr_vertex_counts, pxr::VtValue(curve_point_counts), time);
 
-  if (psys->totpart > 0) {
+  if (usd_export_context_.export_params.export_object_color) {
+    write_object_color(*context.object, curves, true);
+  }
+  else if (psys->totpart > 0) {
     pxr::VtArray<pxr::GfVec3f> colors;
     colors.push_back(pxr::GfVec3f(cache[0]->col));
     curves.CreateDisplayColorAttr(pxr::VtValue(colors));

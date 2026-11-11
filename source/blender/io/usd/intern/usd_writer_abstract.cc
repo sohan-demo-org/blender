@@ -10,6 +10,7 @@
 
 #include <pxr/base/tf/stringUtils.h>
 #include <pxr/usd/usdGeom/bboxCache.h>
+#include <pxr/usd/usdGeom/primvarsAPI.h>
 #include <pxr/usd/usdGeom/scope.h>
 #include <pxr/usd/usdUI/accessibilityAPI.h>
 
@@ -18,6 +19,7 @@
 
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 #include "WM_types.hh"
 
@@ -580,6 +582,37 @@ void USDAbstractWriter::add_to_prim_map(const pxr::SdfPath &usd_path, const ID *
   if (usd_export_context_.hierarchy_iterator) {
     usd_export_context_.hierarchy_iterator->add_to_prim_map(usd_path, id);
   }
+}
+
+void USDAbstractWriter::write_object_color(const Object &object,
+                                           const pxr::UsdGeomGprim &gprim,
+                                           const bool override_existing)
+{
+  if (!usd_export_context_.export_params.export_object_color) {
+    return;
+  }
+
+  /* Only skip a `displayColor` that was not authored by this function on an earlier frame.
+   * Check for an authored value: `displayColor` is a built-in Gprim schema attribute, so it
+   * always "exists" on the prim. */
+  if (!override_existing && !object_color_written_ &&
+      pxr::UsdGeomPrimvarsAPI(gprim).GetPrimvar(usdtokens::displayColor).HasAuthoredValue())
+  {
+    return;
+  }
+
+  const pxr::VtArray<pxr::GfVec3f> colors{
+      pxr::GfVec3f(object.color[0], object.color[1], object.color[2])};
+
+  pxr::UsdGeomPrimvar pv_color = gprim.CreateDisplayColorPrimvar(pxr::UsdGeomTokens->constant);
+  pxr::UsdAttribute attr_color = pv_color.GetAttr();
+  if (!attr_color.HasValue()) {
+    attr_color.Set(colors, pxr::UsdTimeCode::Default());
+  }
+  usd_value_writer_.SetAttribute(attr_color, pxr::VtValue(colors), get_export_time_code());
+  colorspace_apply_to_prim(gprim.GetPrim());
+
+  object_color_written_ = true;
 }
 
 }  // namespace io::usd

@@ -9,6 +9,7 @@
 #include <pxr/usd/sdf/path.h>
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usd/usdGeom/boundable.h>
+#include <pxr/usd/usdGeom/gprim.h>
 #include <pxr/usd/usdShade/material.h>
 #include <pxr/usd/usdUtils/sparseValueWriter.h>
 
@@ -35,6 +36,7 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
 
   bool frame_has_been_written_;
   bool is_animated_;
+  bool object_color_written_ = false;
 
  public:
   USDAbstractWriter(const USDExporterContext &usd_export_context);
@@ -120,6 +122,15 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
                      const pxr::UsdTimeCode time);
 
   void add_to_prim_map(const pxr::SdfPath &usd_path, const ID *id) const;
+
+  /**
+   * Author the object's viewport color (`Object.color`, alpha dropped) as a constant
+   * `displayColor` primvar when the "Export Object Color" option is enabled. An existing
+   * `displayColor` primvar (e.g. from a mesh attribute) is kept unless `override_existing`.
+   */
+  void write_object_color(const Object &object,
+                          const pxr::UsdGeomGprim &gprim,
+                          bool override_existing = false);
 };
 
 }  // namespace io::usd

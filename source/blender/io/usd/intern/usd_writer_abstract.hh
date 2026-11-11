@@ -9,6 +9,7 @@
 #include <pxr/usd/sdf/path.h>
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usd/usdGeom/boundable.h>
+#include <pxr/usd/usdGeom/gprim.h>
 #include <pxr/usd/usdShade/material.h>
 #include <pxr/usd/usdUtils/sparseValueWriter.h>
 
@@ -35,6 +36,7 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
 
   bool frame_has_been_written_;
   bool is_animated_;
+  bool object_color_written_ = false;
 
  public:
   USDAbstractWriter(const USDExporterContext &usd_export_context);
@@ -85,6 +87,15 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
   void write_visibility(const HierarchyContext &context,
                         const pxr::UsdTimeCode time,
                         const pxr::UsdGeomImageable &usd_geometry);
+
+  /**
+   * When the "Export Object Color" option is enabled, author the object's viewport display
+   * color as constant `primvars:displayColor` and `primvars:displayOpacity` on `gprim`.
+   *
+   * A `displayColor` primvar already authored from the object's own data (e.g. a color
+   * attribute named "displayColor") takes precedence and is left untouched.
+   */
+  void write_object_color(const HierarchyContext &context, const pxr::UsdGeomGprim &gprim);
 
   /**
    * Turn `prim` into an instance referencing `context.original_export_path`.

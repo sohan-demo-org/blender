@@ -1049,6 +1049,68 @@ class USDExportTest(AbstractUSDTest):
         weights = self.round_vector([1, math.sqrt(2) / 2] * 5)
         check_nurbs_curve(curve, True, [3], [10], weights, 13, [[-2, -2, -1], [2, 2, 1]])
 
+    def test_export_object_color(self):
+        """Test exporting the object viewport color as displayColor/displayOpacity primvars"""
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+
+        bpy.ops.mesh.primitive_cube_add()
+        mesh_ob = bpy.context.active_object
+        mesh_ob.name = "ColorMesh"
+        mesh_ob.color = (1.0, 0.0, 0.0, 0.5)
+
+        bpy.ops.curve.primitive_bezier_curve_add()
+        curve_ob = bpy.context.active_object
+        curve_ob.name = "ColorCurve"
+        curve_ob.color = (0.0, 1.0, 0.0, 1.0)
+
+        bpy.ops.object.pointcloud_random_add()
+        points_ob = bpy.context.active_object
+        points_ob.name = "ColorPoints"
+        points_ob.color = (0.0, 0.0, 1.0, 0.25)
+
+        bpy.ops.mesh.primitive_plane_add()
+        attr_ob = bpy.context.active_object
+        attr_ob.name = "AttrMesh"
+        attr_ob.color = (1.0, 1.0, 0.0, 1.0)
+        attr = attr_ob.data.color_attributes.new("displayColor", 'FLOAT_COLOR', 'CORNER')
+        for item in attr.data:
+            item.color = (0.2, 0.4, 0.6, 1.0)
+
+        # Option is off by default: no displayColor or displayOpacity is authored.
+        export_path = self.tempdir / "usd_object_color_off.usda"
+        self.export_and_validate(filepath=str(export_path))
+        stage = Usd.Stage.Open(str(export_path))
+        for path in ("/root/ColorMesh/Cube", "/root/ColorCurve/BezierCurve", "/root/ColorPoints/PointCloud"):
+            gprim = UsdGeom.Gprim(stage.GetPrimAtPath(path))
+            self.assertTrue(gprim, path)
+            self.assertFalse(gprim.GetDisplayColorAttr().HasAuthoredValue(), path)
+            self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue(), path)
+
+        export_path = self.tempdir / "usd_object_color_on.usda"
+        self.export_and_validate(filepath=str(export_path), export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        def check_object_color(path, color, opacity):
+            gprim = UsdGeom.Gprim(stage.GetPrimAtPath(path))
+            self.assertTrue(gprim, path)
+            pv_color = gprim.GetDisplayColorPrimvar()
+            pv_opacity = gprim.GetDisplayOpacityPrimvar()
+            self.assertEqual(pv_color.GetInterpolation(), UsdGeom.Tokens.constant)
+            self.assertEqual(pv_opacity.GetInterpolation(), UsdGeom.Tokens.constant)
+            self.assertEqual(pv_color.GetTypeName(), Sdf.ValueTypeNames.Color3fArray)
+            self.assertEqual(pv_opacity.GetTypeName(), Sdf.ValueTypeNames.FloatArray)
+            self.assertEqual([self.round_vector(c) for c in pv_color.Get()], [color])
+            self.assertEqual(self.round_vector(pv_opacity.Get()), [opacity])
+
+        check_object_color("/root/ColorMesh/Cube", [1.0, 0.0, 0.0], 0.5)
+        check_object_color("/root/ColorCurve/BezierCurve", [0.0, 1.0, 0.0], 1.0)
+        check_object_color("/root/ColorPoints/PointCloud", [0.0, 0.0, 1.0], 0.25)
+
+        # A "displayColor" color attribute takes precedence over the object color.
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AttrMesh/Plane"))
+        self.assertEqual(gprim.GetDisplayColorPrimvar().GetInterpolation(), UsdGeom.Tokens.faceVarying)
+        self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
+
     def test_export_curves_empty(self):
         """Test exporting Curves that are empty"""
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_curves_empty.blend"))

@@ -18,6 +18,7 @@
 
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 #include "WM_types.hh"
 
@@ -368,6 +369,32 @@ void USDAbstractWriter::write_visibility(const HierarchyContext &context,
                                                pxr::UsdGeomTokens->invisible;
 
   usd_value_writer_.SetAttribute(attr_visibility, pxr::VtValue(visibility), time);
+}
+
+void USDAbstractWriter::write_object_color(const HierarchyContext &context,
+                                           const pxr::UsdGeomGprim &gprim)
+{
+  if (!usd_export_context_.export_params.export_object_color) {
+    return;
+  }
+  if (!object_color_written_ && gprim.GetDisplayColorAttr().HasAuthoredValue()) {
+    return;
+  }
+
+  const float *color = context.object->color;
+  const pxr::UsdTimeCode time = get_export_time_code();
+
+  const pxr::UsdGeomPrimvar pv_color = gprim.CreateDisplayColorPrimvar(
+      pxr::UsdGeomTokens->constant, 1);
+  const pxr::VtArray<pxr::GfVec3f> usd_color = {pxr::GfVec3f(color[0], color[1], color[2])};
+  usd_value_writer_.SetAttribute(pv_color.GetAttr(), pxr::VtValue(usd_color), time);
+
+  const pxr::UsdGeomPrimvar pv_opacity = gprim.CreateDisplayOpacityPrimvar(
+      pxr::UsdGeomTokens->constant, 1);
+  const pxr::VtArray<float> usd_opacity = {color[3]};
+  usd_value_writer_.SetAttribute(pv_opacity.GetAttr(), pxr::VtValue(usd_opacity), time);
+
+  object_color_written_ = true;
 }
 
 bool USDAbstractWriter::mark_as_instance(const HierarchyContext &context, const pxr::UsdPrim &prim)

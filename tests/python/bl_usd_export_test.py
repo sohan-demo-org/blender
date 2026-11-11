@@ -1080,6 +1080,44 @@ class USDExportTest(AbstractUSDTest):
         for item in attr.data:
             item.color = (0.2, 0.4, 0.6, 1.0)
 
+        bpy.ops.mesh.primitive_plane_add()
+        opacity_ob = bpy.context.active_object
+        opacity_ob.name = "OpacityMesh"
+        opacity_ob.data.name = "OpacityMesh"
+        opacity_ob.color = (1.0, 0.0, 1.0, 0.75)
+        opacity_attr = opacity_ob.data.attributes.new("displayOpacity", 'FLOAT', 'POINT')
+        for item in opacity_attr.data:
+            item.value = 0.3
+
+        # A "displayColor" attribute added by a modifier that is only enabled from frame 2.
+        bpy.ops.mesh.primitive_plane_add()
+        anim_ob = bpy.context.active_object
+        anim_ob.name = "AnimAttrMesh"
+        anim_ob.data.name = "AnimAttrMesh"
+        anim_ob.color = (0.0, 1.0, 1.0, 1.0)
+        tree = bpy.data.node_groups.new("StoreDisplayColor", 'GeometryNodeTree')
+        tree.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+        tree.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+        group_in = tree.nodes.new('NodeGroupInput')
+        group_out = tree.nodes.new('NodeGroupOutput')
+        store = tree.nodes.new('GeometryNodeStoreNamedAttribute')
+        store.data_type = 'FLOAT_COLOR'
+        store.domain = 'POINT'
+        store.inputs["Name"].default_value = "displayColor"
+        store.inputs["Value"].default_value = (0.8, 0.6, 0.4, 1.0)
+        tree.links.new(group_in.outputs[0], store.inputs["Geometry"])
+        tree.links.new(store.outputs["Geometry"], group_out.inputs[0])
+        mod = anim_ob.modifiers.new("StoreDisplayColor", 'NODES')
+        mod.node_group = tree
+        for frame, enabled in ((1, False), (2, True)):
+            mod.show_viewport = enabled
+            mod.show_render = enabled
+            mod.keyframe_insert("show_viewport", frame=frame)
+            mod.keyframe_insert("show_render", frame=frame)
+        bpy.context.scene.frame_start = 1
+        bpy.context.scene.frame_end = 2
+        bpy.context.scene.frame_set(1)
+
         # Option is off by default: no displayColor or displayOpacity is authored.
         export_path = self.tempdir / "usd_object_color_off.usda"
         self.export_and_validate(filepath=str(export_path))
@@ -1114,6 +1152,27 @@ class USDExportTest(AbstractUSDTest):
         gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AttrMesh/AttrMesh"))
         self.assertEqual(gprim.GetDisplayColorPrimvar().GetInterpolation(), UsdGeom.Tokens.faceVarying)
         self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
+
+        # A "displayOpacity" attribute is kept, and the object color is not mixed in.
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/OpacityMesh/OpacityMesh"))
+        pv_opacity = gprim.GetDisplayOpacityPrimvar()
+        self.assertEqual(pv_opacity.GetInterpolation(), UsdGeom.Tokens.vertex)
+        self.assertEqual(self.round_vector(pv_opacity.Get()), [0.3] * 4)
+        self.assertFalse(gprim.GetDisplayColorAttr().HasAuthoredValue())
+
+        # A "displayColor" attribute that appears on a later frame replaces the object color.
+        export_path = self.tempdir / "usd_object_color_anim.usda"
+        self.export_and_validate(
+            filepath=str(export_path),
+            export_object_color=True,
+            export_animation=True,
+            evaluation_mode="RENDER")
+        stage = Usd.Stage.Open(str(export_path))
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AnimAttrMesh/AnimAttrMesh"))
+        pv_color = gprim.GetDisplayColorPrimvar()
+        self.assertEqual([self.round_vector(c) for c in pv_color.Get(1)], [[0.0, 1.0, 1.0]])
+        self.assertEqual(pv_color.GetInterpolation(), UsdGeom.Tokens.vertex)
+        self.assertEqual([self.round_vector(c) for c in pv_color.Get(2)], [[0.8, 0.6, 0.4]] * 4)
 
     def test_export_curves_empty(self):
         """Test exporting Curves that are empty"""

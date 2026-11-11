@@ -377,7 +377,19 @@ void USDAbstractWriter::write_object_color(const HierarchyContext &context,
   if (!usd_export_context_.export_params.export_object_color) {
     return;
   }
-  if (!object_color_written_ && gprim.GetDisplayColorAttr().HasAuthoredValue()) {
+  /* Display primvars authored by the geometry itself (color attributes, hair colors) take
+   * precedence. Geometry primvars are never constant, which tells them apart from an object color
+   * written on an earlier frame. */
+  const auto authored_by_geometry = [&](const pxr::UsdAttribute &attr) {
+    if (!attr.HasAuthoredValue()) {
+      return false;
+    }
+    return !object_color_written_ ||
+           pxr::UsdGeomPrimvar(attr).GetInterpolation() != pxr::UsdGeomTokens->constant;
+  };
+  if (authored_by_geometry(gprim.GetDisplayColorAttr()) ||
+      authored_by_geometry(gprim.GetDisplayOpacityAttr()))
+  {
     return;
   }
 

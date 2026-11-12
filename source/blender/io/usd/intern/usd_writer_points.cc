@@ -57,6 +57,7 @@ void USDPointsWriter::do_write(HierarchyContext &context)
   this->write_ids(points, usd_points, time);
   this->write_velocities(points, usd_points, time);
   this->write_custom_data(points, usd_points, time);
+  this->write_object_color(context, usd_points);
 
   this->author_extent(usd_points, points->bounds_min_max(), time);
 }

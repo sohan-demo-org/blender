@@ -18,6 +18,7 @@
 
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 #include "WM_types.hh"
 
@@ -368,6 +369,60 @@ void USDAbstractWriter::write_visibility(const HierarchyContext &context,
                                                pxr::UsdGeomTokens->invisible;
 
   usd_value_writer_.SetAttribute(attr_visibility, pxr::VtValue(visibility), time);
+}
+
+void USDAbstractWriter::write_object_color(const HierarchyContext &context,
+                                           const pxr::UsdGeomGprim &gprim)
+{
+  if (!usd_export_context_.export_params.export_object_color) {
+    return;
+  }
+  /* Display primvars authored by the geometry itself (color attributes, hair colors) take
+   * precedence. Geometry primvars are never constant, which tells them apart from an object color
+   * written on an earlier frame. */
+  const auto authored_by_geometry = [&](const pxr::UsdAttribute &attr) {
+    if (!attr.HasAuthoredValue()) {
+      return false;
+    }
+    return !object_color_written_ ||
+           pxr::UsdGeomPrimvar(attr).GetInterpolation() != pxr::UsdGeomTokens->constant;
+  };
+  const pxr::UsdAttribute color_attr = gprim.GetDisplayColorAttr();
+  const pxr::UsdAttribute opacity_attr = gprim.GetDisplayOpacityAttr();
+  if (authored_by_geometry(color_attr) || authored_by_geometry(opacity_attr)) {
+    if (object_color_written_) {
+      /* The geometry took over on this frame. Interpolation can't vary over time, so drop the
+       * constant object color samples written on earlier frames. */
+      const double current_time = get_export_time_code().GetValue();
+      for (const pxr::UsdAttribute &attr : {color_attr, opacity_attr}) {
+        std::vector<double> times;
+        attr.GetTimeSamples(&times);
+        for (const double t : times) {
+          if (t < current_time) {
+            attr.ClearAtTime(t);
+          }
+        }
+        attr.ClearDefault();
+      }
+      object_color_written_ = false;
+    }
+    return;
+  }
+
+  const float *color = context.object->color;
+  const pxr::UsdTimeCode time = get_export_time_code();
+
+  const pxr::UsdGeomPrimvar pv_color = gprim.CreateDisplayColorPrimvar(
+      pxr::UsdGeomTokens->constant);
+  const pxr::VtArray<pxr::GfVec3f> usd_color = {pxr::GfVec3f(color[0], color[1], color[2])};
+  usd_value_writer_.SetAttribute(pv_color.GetAttr(), pxr::VtValue(usd_color), time);
+
+  const pxr::UsdGeomPrimvar pv_opacity = gprim.CreateDisplayOpacityPrimvar(
+      pxr::UsdGeomTokens->constant);
+  const pxr::VtArray<float> usd_opacity = {color[3]};
+  usd_value_writer_.SetAttribute(pv_opacity.GetAttr(), pxr::VtValue(usd_opacity), time);
+
+  object_color_written_ = true;
 }
 
 bool USDAbstractWriter::mark_as_instance(const HierarchyContext &context, const pxr::UsdPrim &prim)

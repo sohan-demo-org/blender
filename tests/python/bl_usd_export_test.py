@@ -608,6 +608,24 @@ class USDExportTest(AbstractUSDTest):
         self.assertEqual(hair_curves.GetBasisAttr().Get(), "catmullRom")
         self.assertEqual(len(hair_samples), 10)
 
+        # Strand colors take precedence over the object color.
+        strand_color = [self.round_vector(c) for c in hair_curves.GetDisplayColorAttr().Get()]
+        self.assertTrue(strand_color)
+        bpy.data.objects["Sphere"].color = (0.1, 0.2, 0.3, 0.4)
+        export_path = self.tempdir / "usd_particle_hair_object_color.usda"
+        self.export_and_validate(
+            filepath=str(export_path),
+            export_hair=True,
+            export_animation=True,
+            export_object_color=True,
+            evaluation_mode="RENDER")
+        stage = Usd.Stage.Open(str(export_path))
+        hair_curves = UsdGeom.BasisCurves(stage.GetPrimAtPath("/root/Sphere/ParticleSystem"))
+        attr_color = hair_curves.GetDisplayColorAttr()
+        self.assertFalse(attr_color.GetTimeSamples())
+        self.assertEqual([self.round_vector(c) for c in attr_color.Get()], strand_color)
+        self.assertFalse(hair_curves.GetDisplayOpacityAttr().HasAuthoredValue())
+
     def check_primvar(self, prim, pv_name, pv_typeName, pv_interp, elements_len):
         pv = UsdGeom.PrimvarsAPI(prim).GetPrimvar(pv_name)
         self.assertTrue(pv.HasValue())
@@ -1048,6 +1066,133 @@ class USDExportTest(AbstractUSDTest):
         curve = UsdGeom.NurbsCurves(stage.GetPrimAtPath("/root/NurbsCircle/NurbsCircle"))
         weights = self.round_vector([1, math.sqrt(2) / 2] * 5)
         check_nurbs_curve(curve, True, [3], [10], weights, 13, [[-2, -2, -1], [2, 2, 1]])
+
+    def test_export_object_color(self):
+        """Test exporting the object viewport color as displayColor/displayOpacity primvars"""
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+
+        bpy.ops.mesh.primitive_cube_add()
+        mesh_ob = bpy.context.active_object
+        mesh_ob.name = "ColorMesh"
+        mesh_ob.data.name = "ColorMesh"
+        mesh_ob.color = (1.0, 0.0, 0.0, 0.5)
+
+        bpy.ops.curve.primitive_bezier_curve_add()
+        curve_ob = bpy.context.active_object
+        curve_ob.name = "ColorCurve"
+        curve_ob.data.name = "ColorCurve"
+        curve_ob.color = (0.0, 1.0, 0.0, 1.0)
+
+        bpy.ops.object.pointcloud_random_add()
+        points_ob = bpy.context.active_object
+        points_ob.name = "ColorPoints"
+        points_ob.data.name = "ColorPoints"
+        points_ob.color = (0.0, 0.0, 1.0, 0.25)
+
+        bpy.ops.mesh.primitive_plane_add()
+        attr_ob = bpy.context.active_object
+        attr_ob.name = "AttrMesh"
+        attr_ob.data.name = "AttrMesh"
+        attr_ob.color = (1.0, 1.0, 0.0, 1.0)
+        attr = attr_ob.data.color_attributes.new("displayColor", 'FLOAT_COLOR', 'CORNER')
+        for item in attr.data:
+            item.color = (0.2, 0.4, 0.6, 1.0)
+
+        bpy.ops.mesh.primitive_plane_add()
+        opacity_ob = bpy.context.active_object
+        opacity_ob.name = "OpacityMesh"
+        opacity_ob.data.name = "OpacityMesh"
+        opacity_ob.color = (1.0, 0.0, 1.0, 0.75)
+        opacity_attr = opacity_ob.data.attributes.new("displayOpacity", 'FLOAT', 'POINT')
+        for item in opacity_attr.data:
+            item.value = 0.3
+
+        # A "displayColor" attribute added by a modifier that is only enabled from frame 2.
+        bpy.ops.mesh.primitive_plane_add()
+        anim_ob = bpy.context.active_object
+        anim_ob.name = "AnimAttrMesh"
+        anim_ob.data.name = "AnimAttrMesh"
+        anim_ob.color = (0.0, 1.0, 1.0, 1.0)
+        tree = bpy.data.node_groups.new("StoreDisplayColor", 'GeometryNodeTree')
+        tree.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+        tree.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+        group_in = tree.nodes.new('NodeGroupInput')
+        group_out = tree.nodes.new('NodeGroupOutput')
+        store = tree.nodes.new('GeometryNodeStoreNamedAttribute')
+        store.data_type = 'FLOAT_COLOR'
+        store.domain = 'POINT'
+        store.inputs["Name"].default_value = "displayColor"
+        store.inputs["Value"].default_value = (0.8, 0.6, 0.4, 1.0)
+        tree.links.new(group_in.outputs[0], store.inputs["Geometry"])
+        tree.links.new(store.outputs["Geometry"], group_out.inputs[0])
+        mod = anim_ob.modifiers.new("StoreDisplayColor", 'NODES')
+        mod.node_group = tree
+        for frame, enabled in ((1, False), (2, True)):
+            mod.show_viewport = enabled
+            mod.show_render = enabled
+            mod.keyframe_insert("show_viewport", frame=frame)
+            mod.keyframe_insert("show_render", frame=frame)
+        bpy.context.scene.frame_start = 1
+        bpy.context.scene.frame_end = 2
+        bpy.context.scene.frame_set(1)
+
+        # Option is off by default: no displayColor or displayOpacity is authored.
+        export_path = self.tempdir / "usd_object_color_off.usda"
+        self.export_and_validate(filepath=str(export_path))
+        stage = Usd.Stage.Open(str(export_path))
+        for path in ("/root/ColorMesh/ColorMesh", "/root/ColorCurve/ColorCurve", "/root/ColorPoints/ColorPoints"):
+            gprim = UsdGeom.Gprim(stage.GetPrimAtPath(path))
+            self.assertTrue(gprim, path)
+            self.assertFalse(gprim.GetDisplayColorAttr().HasAuthoredValue(), path)
+            self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue(), path)
+
+        export_path = self.tempdir / "usd_object_color_on.usda"
+        self.export_and_validate(filepath=str(export_path), export_object_color=True)
+        stage = Usd.Stage.Open(str(export_path))
+
+        def check_object_color(path, color, opacity):
+            gprim = UsdGeom.Gprim(stage.GetPrimAtPath(path))
+            self.assertTrue(gprim, path)
+            pv_color = gprim.GetDisplayColorPrimvar()
+            pv_opacity = gprim.GetDisplayOpacityPrimvar()
+            self.assertEqual(pv_color.GetInterpolation(), UsdGeom.Tokens.constant)
+            self.assertEqual(pv_opacity.GetInterpolation(), UsdGeom.Tokens.constant)
+            self.assertEqual(pv_color.GetTypeName(), Sdf.ValueTypeNames.Color3fArray)
+            self.assertEqual(pv_opacity.GetTypeName(), Sdf.ValueTypeNames.FloatArray)
+            self.assertEqual([self.round_vector(c) for c in pv_color.Get()], [color])
+            self.assertEqual(self.round_vector(pv_opacity.Get()), [opacity])
+
+        check_object_color("/root/ColorMesh/ColorMesh", [1.0, 0.0, 0.0], 0.5)
+        check_object_color("/root/ColorCurve/ColorCurve", [0.0, 1.0, 0.0], 1.0)
+        check_object_color("/root/ColorPoints/ColorPoints", [0.0, 0.0, 1.0], 0.25)
+
+        # A "displayColor" color attribute takes precedence over the object color.
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AttrMesh/AttrMesh"))
+        self.assertEqual(gprim.GetDisplayColorPrimvar().GetInterpolation(), UsdGeom.Tokens.faceVarying)
+        self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
+
+        # A "displayOpacity" attribute is kept, and the object color is not mixed in.
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/OpacityMesh/OpacityMesh"))
+        pv_opacity = gprim.GetDisplayOpacityPrimvar()
+        self.assertEqual(pv_opacity.GetInterpolation(), UsdGeom.Tokens.vertex)
+        self.assertEqual(self.round_vector(pv_opacity.Get()), [0.3] * 4)
+        self.assertFalse(gprim.GetDisplayColorAttr().HasAuthoredValue())
+
+        # A "displayColor" attribute that appears on a later frame replaces the object color.
+        export_path = self.tempdir / "usd_object_color_anim.usda"
+        self.export_and_validate(
+            filepath=str(export_path),
+            export_object_color=True,
+            export_animation=True,
+            evaluation_mode="RENDER")
+        stage = Usd.Stage.Open(str(export_path))
+        gprim = UsdGeom.Gprim(stage.GetPrimAtPath("/root/AnimAttrMesh/AnimAttrMesh"))
+        pv_color = gprim.GetDisplayColorPrimvar()
+        # Interpolation can't vary over time, so the earlier constant object color is dropped.
+        self.assertEqual(pv_color.GetInterpolation(), UsdGeom.Tokens.vertex)
+        self.assertEqual(pv_color.GetAttr().GetTimeSamples(), [2.0])
+        self.assertEqual([self.round_vector(c) for c in pv_color.Get(2)], [[0.8, 0.6, 0.4]] * 4)
+        self.assertFalse(gprim.GetDisplayOpacityAttr().HasAuthoredValue())
 
     def test_export_curves_empty(self):
         """Test exporting Curves that are empty"""

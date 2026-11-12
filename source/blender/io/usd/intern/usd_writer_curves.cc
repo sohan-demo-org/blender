@@ -689,6 +689,7 @@ void USDCurvesWriter::do_write(HierarchyContext &context)
     this->write_velocities(curves, *usd_curves);
     this->write_custom_data(curves, *usd_curves);
   }
+  this->write_object_color(context, *usd_curves);
 
   if (curves_id) {
     const pxr::UsdPrim prim = usd_curves->GetPrim();

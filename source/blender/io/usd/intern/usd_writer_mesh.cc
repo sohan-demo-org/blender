@@ -420,6 +420,7 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context,
 
   write_custom_data(context.object, mesh, usd_mesh);
   write_surface_velocity(mesh, usd_mesh);
+  write_object_color(context, usd_mesh);
 
   const pxr::TfToken subdiv_scheme = get_subdiv_scheme(subsurfData);
 

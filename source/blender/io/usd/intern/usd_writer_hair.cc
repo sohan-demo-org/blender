@@ -79,6 +79,7 @@ void USDHairWriter::do_write(HierarchyContext &context)
     colors.push_back(pxr::GfVec3f(cache[0]->col));
     curves.CreateDisplayColorAttr(pxr::VtValue(colors));
   }
+  write_object_color(context, curves);
 
   if (psys->part) {
     auto prim = curves.GetPrim();

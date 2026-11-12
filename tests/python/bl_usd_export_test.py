@@ -608,6 +608,24 @@ class USDExportTest(AbstractUSDTest):
         self.assertEqual(hair_curves.GetBasisAttr().Get(), "catmullRom")
         self.assertEqual(len(hair_samples), 10)
 
+        # Strand colors take precedence over the object color.
+        strand_color = [self.round_vector(c) for c in hair_curves.GetDisplayColorAttr().Get()]
+        self.assertTrue(strand_color)
+        bpy.data.objects["Sphere"].color = (0.1, 0.2, 0.3, 0.4)
+        export_path = self.tempdir / "usd_particle_hair_object_color.usda"
+        self.export_and_validate(
+            filepath=str(export_path),
+            export_hair=True,
+            export_animation=True,
+            export_object_color=True,
+            evaluation_mode="RENDER")
+        stage = Usd.Stage.Open(str(export_path))
+        hair_curves = UsdGeom.BasisCurves(stage.GetPrimAtPath("/root/Sphere/ParticleSystem"))
+        attr_color = hair_curves.GetDisplayColorAttr()
+        self.assertFalse(attr_color.GetTimeSamples())
+        self.assertEqual([self.round_vector(c) for c in attr_color.Get()], strand_color)
+        self.assertFalse(hair_curves.GetDisplayOpacityAttr().HasAuthoredValue())
+
     def check_primvar(self, prim, pv_name, pv_typeName, pv_interp, elements_len):
         pv = UsdGeom.PrimvarsAPI(prim).GetPrimvar(pv_name)
         self.assertTrue(pv.HasValue())
